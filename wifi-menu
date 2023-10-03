@@ -1,0 +1,143 @@
+#!/bin/sh
+
+INT=$1
+WIFI_DIR="/etc/wifi_saved"
+
+if [ "$(id -u)" != "0" ]; then
+    echo "[!] This script must be run as root"
+    exit
+fi
+
+if [ -z "$1" ]; then
+    echo "Usage: doas $0 [interface]"
+    exit
+fi
+
+read_saved() {
+    #/sbin/ifconfig $INT -inet6 -inet -bssid -chan -nwid -nwkey -wpa -wpakey
+    #/sbin/ifconfig $INT lladdr random
+
+    SAVED_LIST=$(ls -h $WIFI_DIR)
+           if [ -z "${SAVED_LIST[0]}" ]; then
+                 echo "[!] There are no previous saved Wi-Fi connections"
+                 conf_create
+	   else
+		 echo "Saved Wi-Fi connections:"
+	   fi
+
+    i=1
+    while IFS= read -r LINE
+    do
+	echo "$i. $LINE"
+	file[i]=$LINE
+        i=$(( i + 1 ))	
+    done <<- EOF
+	${SAVED_LIST}
+	EOF
+
+    echo -n "Choose a previously saved Wi-Fi connection or \"Enter\" to skip: "
+    read v_CHOOSELIST
+
+    if [ -z "${file[$v_CHOOSELIST]}" ];then
+        conf_create
+    fi
+
+    echo "\"${file[$v_CHOOSELIST]}\" is selected"
+    saved_connect "${file[$v_CHOOSELIST]}"
+}
+
+conf_create() {
+    /sbin/ifconfig "$INT" up
+    /usr/bin/pkill dhclient
+    RAW_LIST=$(/sbin/ifconfig $INT scan 2>/dev/null |
+                            sed -ne 's/^.*nwid \(.*\) chan .*$/\1/p')
+
+    i=1       
+    while IFS= read -r LINE
+    do
+        if [ "$LINE" = '""' ]; then
+                continue
+        fi
+	if [ "${repeated#*"$LINE"}" != "$repeated" ]; then
+		continue
+	fi
+	repeated="${repeated}${LINE}"
+	LINE=$(echo "$LINE" | sed 's/\"//g')
+	nicelist="${nicelist}\n$i. ${LINE}"
+	list[i]=$LINE
+        i=$((i+1))
+    done <<- EOF
+	$RAW_LIST
+	EOF
+	
+    echo "$nicelist" | column -s '\n'
+
+    if [ -z "${list[1]}" ]; then
+		echo "[!] No available Wi-Fi connection using $INT"
+		exit
+    fi
+
+    echo -n "Choose Wi-Fi connection or \"Enter\" to quit: "
+    read i_CHOOSELIST
+
+    if [ -z "${list[$i_CHOOSELIST]}" ]; then
+        echo "[!] Exiting"
+        exit
+    fi
+
+        echo "Enter the passphrase for \"${list[$i_CHOOSELIST]}\"?"
+        echo "Password: "
+        stty -echo
+        read  PASSWORD
+        stty echo
+
+    if [ ${#PASSWORD} -lt 8 ];then
+        echo "[!] wpakey: passphrase must be between 8 and 63 characters"
+        exit
+    fi
+
+echo "-inet6 -bssid -chan -nwid -nwkey -wpa -wpakey
+nwid \"${list[$i_CHOOSELIST]}\" lladdr \"random\"
+wpakey \"$PASSWORD\" mode \"11b\"
+dhcp" > "$WIFI_DIR/${list[$i_CHOOSELIST]}.$INT" | xargs
+chmod 600 "$WIFI_DIR/${list[$i_CHOOSELIST]}"."$INT"
+
+    echo "Creating new configuration using \"${list[$i_CHOOSELIST]}\""
+    connect "${list[$i_CHOOSELIST]}"
+}
+
+saved_connect() {
+    echo "Connecting using file \"${file[$v_CHOOSELIST]}\""
+    /sbin/ifconfig "$INT" up
+    /usr/bin/pkill dhclient
+    /sbin/ifconfig "$INT" nwid "$(grep nwid "$WIFI_DIR/${file[$v_CHOOSELIST]}" | tail -1 |
+            cut -d\" -f2 )" wpakey "$(grep  wpakey "$WIFI_DIR/${file[$v_CHOOSELIST]}"  |
+            tail -1| cut -d\" -f2)" mode "11b"
+    /bin/cp "$WIFI_DIR/${file[$v_CHOOSELIST]}" /etc/hostname."$INT"
+    echo "Configured interface $INT; ESSID is \"${file[$v_CHOOSELIST]}\""
+    echo "Interface $INT is up"
+    echo "Running dhclient"
+    /sbin/dhclient "$INT"
+    #/usr/sbin/rcctl restart dnscrypt_proxy unbound
+    exit
+}
+
+connect() {
+    ESSID=$*
+    echo "Connecting using file \"$ESSID\""
+    /sbin/ifconfig "$INT" up
+    /usr/bin/pkill dhclient
+    /bin/cp "$WIFI_DIR/${list[$i_CHOOSELIST]}.$INT" /etc/hostname."$INT" 
+    echo "Configured interface $INT; ESSID is \"$ESSID\"" /sbin/ifconfig "$INT" nwid "$ESSID" wpakey "$PASSWORD" 
+    echo "Interface $INT is up"
+    echo "Running dhclient"
+    /sbin/dhclient "$INT"
+    #/usr/sbin/rcctl restart dnscrypt_proxy unbound
+    exit
+}
+
+
+echo "OpenBSD wireless network manager\n"
+
+[ -d $WIFI_DIR ] || mkdir -p -m 600 $WIFI_DIR
+read_saved
