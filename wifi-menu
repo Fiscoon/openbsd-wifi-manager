@@ -114,6 +114,7 @@ saved_connect() {
             cut -d\" -f2 )" wpakey "$(grep  wpakey "$WIFI_DIR/${file[$v_CHOOSELIST]}"  |
             tail -1| cut -d\" -f2)" mode "11b"
     /bin/cp "$WIFI_DIR/${file[$v_CHOOSELIST]}" /etc/hostname."$INT"
+    /bin/chmod 600 /etc/hostname."$INT"
     echo "Configured interface $INT; ESSID is \"${file[$v_CHOOSELIST]}\""
     echo "Interface $INT is up"
     echo "Running dhclient"
@@ -128,6 +129,7 @@ connect() {
     /sbin/ifconfig "$INT" up
     /usr/bin/pkill dhclient
     /bin/cp "$WIFI_DIR/${list[$i_CHOOSELIST]}.$INT" /etc/hostname."$INT" 
+    /bin/chmod 600 /etc/hostname."$INT"
     echo "Configured interface $INT; ESSID is \"$ESSID\"" /sbin/ifconfig "$INT" nwid "$ESSID" wpakey "$PASSWORD" 
     echo "Interface $INT is up"
     echo "Running dhclient"
