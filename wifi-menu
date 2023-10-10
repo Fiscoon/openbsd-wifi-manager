@@ -14,9 +14,6 @@ if [ -z "$1" ]; then
 fi
 
 read_saved() {
-    #/sbin/ifconfig $INT -inet6 -inet -bssid -chan -nwid -nwkey -wpa -wpakey
-    #/sbin/ifconfig $INT lladdr random
-
     SAVED_LIST=$(ls -h $WIFI_DIR)
            if [ -z "${SAVED_LIST[0]}" ]; then
                  echo "[!] There are no previous saved Wi-Fi connections"
@@ -96,10 +93,12 @@ conf_create() {
         exit
     fi
 
-echo "-inet6 -bssid -chan -nwid -nwkey -wpa -wpakey
-nwid \"${list[$i_CHOOSELIST]}\" lladdr \"random\"
-wpakey \"$PASSWORD\" mode \"11b\"
-dhcp" > "$WIFI_DIR/${list[$i_CHOOSELIST]}.$INT" | xargs
+#echo "-inet6 -bssid -chan -nwid -nwkey -wpa -wpakey
+echo "nwid \"${list[$i_CHOOSELIST]}\" wpakey \"$PASSWORD\" 
+#lladdr \"random\"
+mode \"11b\"
+dhcp
+up" > "$WIFI_DIR/${list[$i_CHOOSELIST]}.$INT" | xargs
 chmod 600 "$WIFI_DIR/${list[$i_CHOOSELIST]}"."$INT"
 
     echo "Creating new configuration using \"${list[$i_CHOOSELIST]}\""
@@ -112,14 +111,14 @@ saved_connect() {
     /usr/bin/pkill dhclient
     /sbin/ifconfig "$INT" nwid "$(grep nwid "$WIFI_DIR/${file[$v_CHOOSELIST]}" | tail -1 |
             cut -d\" -f2 )" wpakey "$(grep  wpakey "$WIFI_DIR/${file[$v_CHOOSELIST]}"  |
-            tail -1| cut -d\" -f2)" mode "11b"
+            tail -1| cut -d\" -f2)" 
+    /sbin/ifconfig "$INT" mode "11b"
     /bin/cp "$WIFI_DIR/${file[$v_CHOOSELIST]}" /etc/hostname."$INT"
     /bin/chmod 600 /etc/hostname."$INT"
     echo "Configured interface $INT; ESSID is \"${file[$v_CHOOSELIST]}\""
     echo "Interface $INT is up"
     echo "Running dhclient"
     /sbin/dhclient "$INT"
-    #/usr/sbin/rcctl restart dnscrypt_proxy unbound
     exit
 }
 
@@ -127,14 +126,15 @@ connect() {
     ESSID=$*
     echo "Connecting using file \"$ESSID\""
     /sbin/ifconfig "$INT" up
+    /sbin/ifconfig "$INT" mode "11b"
     /usr/bin/pkill dhclient
     /bin/cp "$WIFI_DIR/${list[$i_CHOOSELIST]}.$INT" /etc/hostname."$INT" 
     /bin/chmod 600 /etc/hostname."$INT"
-    echo "Configured interface $INT; ESSID is \"$ESSID\"" /sbin/ifconfig "$INT" nwid "$ESSID" wpakey "$PASSWORD" 
+    echo "Configured interface $INT; ESSID is \"$ESSID\"" 
+    /sbin/ifconfig "$INT" nwid "$ESSID" wpakey "$PASSWORD" 
     echo "Interface $INT is up"
     echo "Running dhclient"
     /sbin/dhclient "$INT"
-    #/usr/sbin/rcctl restart dnscrypt_proxy unbound
     exit
 }
 
